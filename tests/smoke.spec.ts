@@ -1,8 +1,8 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 
 test("boots, chooses animals, renders gameplay, and persists shared progress", async ({ page }, testInfo) => {
   await page.goto(process.env.BASE_URL ?? "http://127.0.0.1:4173/");
-  await page.evaluate(() => localStorage.clear());
+  await clearLocalStorageAfterServiceWorkerUpdate(page);
   await page.reload();
   await expect(page.getByRole("button", { name: /koala/i })).toBeVisible();
   await page.getByRole("button", { name: /koala/i }).click();
@@ -99,3 +99,17 @@ test("boots, chooses animals, renders gameplay, and persists shared progress", a
   await expect(page.locator("[data-picker]")).toBeHidden();
   await expect(page.locator("[data-objective]")).toContainText("Next:");
 });
+
+async function clearLocalStorageAfterServiceWorkerUpdate(page: Page) {
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      await page.evaluate(() => localStorage.clear());
+      return;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (!message.includes("Execution context was destroyed") || attempt === 2) throw error;
+      await page.waitForLoadState("domcontentloaded").catch(() => undefined);
+      await page.waitForTimeout(350);
+    }
+  }
+}

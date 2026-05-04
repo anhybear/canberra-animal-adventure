@@ -45,6 +45,13 @@ ui = createUI(appRoot, game);
 canvasHost.remove();
 
 if ("serviceWorker" in navigator) {
+  let refreshingForServiceWorker = false;
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    if (refreshingForServiceWorker) return;
+    refreshingForServiceWorker = true;
+    window.location.reload();
+  });
+
   window.addEventListener("load", () => {
     navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`).catch(() => {
       // The game remains playable without offline caching.
