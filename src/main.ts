@@ -15,9 +15,7 @@ const game = new GameApp(canvasHost, {
   onReward: (title, detail) => ui?.reward(title, detail),
 });
 
-if (import.meta.env.DEV) {
-  window.__canberraGame = game;
-}
+window.__canberraGame = game;
 
 ui = createUI(appRoot, game);
 canvasHost.remove();
