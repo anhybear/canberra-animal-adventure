@@ -9,6 +9,22 @@ test("boots, chooses animals, renders gameplay, and persists shared progress", a
   await expect(page.locator("[data-picker]")).toBeHidden();
   await expect(page.locator("[data-objective]")).toContainText("Next:");
 
+  const beforeDrag = await page.evaluate(() => {
+    const player = window.__canberraGame?.state.player;
+    return player ? { x: player.position.x, z: player.position.z } : { x: 0, z: 0 };
+  });
+  const animalScreen = await page.evaluate(() => window.__canberraGame?.getPlayerScreenPosition() ?? { x: 0, y: 0 });
+  await page.mouse.move(animalScreen.x, animalScreen.y);
+  await page.mouse.down();
+  await page.mouse.move(animalScreen.x, animalScreen.y - 108, { steps: 6 });
+  await page.waitForTimeout(850);
+  await page.mouse.up();
+  const afterDrag = await page.evaluate(() => {
+    const player = window.__canberraGame?.state.player;
+    return player ? { x: player.position.x, z: player.position.z } : { x: 0, z: 0 };
+  });
+  expect(Math.hypot(afterDrag.x - beforeDrag.x, afterDrag.z - beforeDrag.z)).toBeGreaterThan(0.75);
+
   const beforeRight = await page.evaluate(() => window.__canberraGame?.state.player?.position.x ?? 0);
   await page.keyboard.down("d");
   await page.waitForTimeout(700);

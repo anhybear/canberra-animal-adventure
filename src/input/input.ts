@@ -12,9 +12,11 @@ export class InputController {
   private joystickCenter = { x: 0, y: 0 };
   private keyboardVector = { x: 0, y: 0 };
   private joystickVector = { x: 0, y: 0 };
+  private characterDragVector = { x: 0, y: 0 };
   private smoothedVector = { x: 0, y: 0 };
   private lastKeyboardAt = 0;
   private lastTouchAt = 0;
+  private lastCharacterDragAt = 0;
 
   private readonly deadzone = 0.14;
   private readonly joystickRadius = 44;
@@ -81,11 +83,22 @@ export class InputController {
     this.state.dashPressed = false;
   }
 
+  setCharacterDragVector(x: number, y: number) {
+    this.characterDragVector = this.applyDeadzone(x, y);
+    this.lastCharacterDragAt = performance.now();
+  }
+
+  clearCharacterDrag() {
+    this.characterDragVector = { x: 0, y: 0 };
+    this.lastCharacterDragAt = performance.now();
+  }
+
   resetMovement() {
     this.keys.clear();
     this.joystickPointer = null;
     this.keyboardVector = { x: 0, y: 0 };
     this.joystickVector = { x: 0, y: 0 };
+    this.characterDragVector = { x: 0, y: 0 };
     this.smoothedVector = { x: 0, y: 0 };
     this.state = { moveX: 0, moveY: 0, jumpPressed: false, dashPressed: false };
   }
@@ -133,6 +146,10 @@ export class InputController {
   private getActiveMoveVector() {
     const hasKeyboard = Math.hypot(this.keyboardVector.x, this.keyboardVector.y) > 0;
     const hasJoystick = this.joystickPointer !== null || Math.hypot(this.joystickVector.x, this.joystickVector.y) > 0;
+    const hasCharacterDrag = Math.hypot(this.characterDragVector.x, this.characterDragVector.y) > 0;
+    if (hasCharacterDrag && (!hasJoystick || this.lastCharacterDragAt >= this.lastTouchAt) && (!hasKeyboard || this.lastCharacterDragAt >= this.lastKeyboardAt)) {
+      return this.characterDragVector;
+    }
     if (hasJoystick && (!hasKeyboard || this.lastTouchAt >= this.lastKeyboardAt)) return this.joystickVector;
     if (hasKeyboard) return this.keyboardVector;
     return { x: 0, y: 0 };

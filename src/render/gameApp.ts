@@ -25,6 +25,8 @@ export class GameApp {
   private audio: AudioContext | null = null;
   private moveTrailTimer = 0;
   private respawnTimers = new Map<string, number>();
+  private characterPointer: number | null = null;
+  private dragAnchor = new THREE.Vector2();
 
   constructor(private canvasHost: HTMLElement, private events: GameAppEvents) {
     this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance", preserveDrawingBuffer: true });
@@ -46,6 +48,10 @@ export class GameApp {
     this.camera.position.set(0, 8, 15);
     this.resize();
     window.addEventListener("resize", this.resize);
+    this.renderer.domElement.addEventListener("pointerdown", this.onCanvasPointerDown);
+    this.renderer.domElement.addEventListener("pointermove", this.onCanvasPointerMove);
+    this.renderer.domElement.addEventListener("pointerup", this.onCanvasPointerEnd);
+    this.renderer.domElement.addEventListener("pointercancel", this.onCanvasPointerEnd);
     this.ensureAnimalRig();
     this.renderer.setAnimationLoop(this.tick);
   }
@@ -84,9 +90,17 @@ export class GameApp {
     this.events.onSnapshot();
   }
 
+  getPlayerScreenPosition() {
+    return this.projectPlayerToScreen();
+  }
+
   destroy() {
     this.disposed = true;
     window.removeEventListener("resize", this.resize);
+    this.renderer.domElement.removeEventListener("pointerdown", this.onCanvasPointerDown);
+    this.renderer.domElement.removeEventListener("pointermove", this.onCanvasPointerMove);
+    this.renderer.domElement.removeEventListener("pointerup", this.onCanvasPointerEnd);
+    this.renderer.domElement.removeEventListener("pointercancel", this.onCanvasPointerEnd);
     this.input.destroy();
     this.renderer.setAnimationLoop(null);
     this.renderer.dispose();
@@ -221,6 +235,61 @@ export class GameApp {
     const target = new THREE.Vector3(player.position.x, player.position.y, player.position.z).add(behind);
     this.camera.position.lerp(target, 1 - Math.exp(-dt * 4.8));
     this.camera.lookAt(player.position.x, player.position.y + 1.35, player.position.z);
+  }
+
+  private onCanvasPointerDown = (event: PointerEvent) => {
+    if (this.characterPointer !== null || !this.state.player) return;
+    const screen = this.projectPlayerToScreen();
+    const distance = Math.hypot(event.clientX - screen.x, event.clientY - screen.y);
+    if (distance > this.getCharacterTouchRadius()) return;
+
+    event.preventDefault();
+    this.characterPointer = event.pointerId;
+    this.dragAnchor.set(screen.x, screen.y);
+    this.renderer.domElement.setPointerCapture(event.pointerId);
+    this.updateCharacterDrag(event);
+  };
+
+  private onCanvasPointerMove = (event: PointerEvent) => {
+    if (event.pointerId !== this.characterPointer) return;
+    event.preventDefault();
+    this.updateCharacterDrag(event);
+  };
+
+  private onCanvasPointerEnd = (event: PointerEvent) => {
+    if (event.pointerId !== this.characterPointer) return;
+    event.preventDefault();
+    this.characterPointer = null;
+    this.input.clearCharacterDrag();
+    if (this.renderer.domElement.hasPointerCapture(event.pointerId)) {
+      this.renderer.domElement.releasePointerCapture(event.pointerId);
+    }
+  };
+
+  private updateCharacterDrag(event: PointerEvent) {
+    const radius = this.getCharacterTouchRadius();
+    const x = THREE.MathUtils.clamp((event.clientX - this.dragAnchor.x) / radius, -1, 1);
+    const y = THREE.MathUtils.clamp((this.dragAnchor.y - event.clientY) / radius, -1, 1);
+    this.input.setCharacterDragVector(x, y);
+  }
+
+  private projectPlayerToScreen() {
+    const player = this.state.player;
+    const canvas = this.renderer.domElement;
+    const rect = canvas.getBoundingClientRect();
+    if (!player || rect.width === 0 || rect.height === 0) return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+
+    const point = new THREE.Vector3(player.position.x, player.position.y + 1.05, player.position.z).project(this.camera);
+    return {
+      x: rect.left + (point.x + 1) * 0.5 * rect.width,
+      y: rect.top + (1 - point.y) * 0.5 * rect.height,
+    };
+  }
+
+  private getCharacterTouchRadius() {
+    const canvas = this.renderer.domElement;
+    const shortestSide = Math.min(canvas.clientWidth || window.innerWidth, canvas.clientHeight || window.innerHeight);
+    return THREE.MathUtils.clamp(shortestSide * 0.13, 76, 124);
   }
 
   private updateScene(elapsed: number, dt: number) {
